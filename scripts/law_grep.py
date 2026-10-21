@@ -4,11 +4,12 @@
   python3 law_grep.py -s 341                 ดึง ป.อาญา มาตรา 341 เต็ม (ค้นทุกฉบับ)
   python3 law_grep.py -s 87 -f crim          ดึง ป.วิ.อ. มาตรา 87
   python3 law_grep.py -s "277 ทวิ"           มาตราที่มี ทวิ/ตรี
-  python3 law_grep.py "ฉ้อโกงประชาชน"        ค้นคำ → รายชื่อมาตราที่เข้าข่าย
+  python3 law_grep.py "แสดงข้อความอันเป็นเท็จ"  ค้นคำ (ทุกคำต้องอยู่ในมาตราเดียวกัน)
   python3 law_grep.py "ปล่อยชั่วคราว" -c 5   ค้นคำ แสดง 5 ผลแรกเต็ม
   python3 law_grep.py --list                 ดูว่ามีตัวบทอะไรบ้าง
 
-รับเลขไทย/อารบิกทั้งคู่ (ม.๓๔๑ = ม.341)
+รับเลขไทย/อารบิก และรูปแบบ "ม.341", "มาตรา ๓๔๑", "277ทวิ" ได้หมด
+ไฟล์ที่ดึงเองด้วย ocs_getdoc.py ให้เก็บใน corpus/local/ (ชื่อเดียวกันจะใช้แทนฉบับที่มากับสกิล)
 """
 from __future__ import annotations
 
@@ -17,22 +18,21 @@ import re
 import sys
 from pathlib import Path
 
-# Windows: console เริ่มต้นเป็น cp874 → print ภาษาไทยแล้ว UnicodeEncodeError ทันที
-# (macOS/Linux เป็น UTF-8 อยู่แล้ว บรรทัดนี้ไม่มีผล)
-for _stream in (sys.stdout, sys.stderr):
-    if hasattr(_stream, "reconfigure"):
-        _stream.reconfigure(encoding="utf-8", errors="replace")
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _text import fix_console, norm_section, norm_thai, to_arabic  # noqa: E402
+
+fix_console()
 
 CORPUS = Path(__file__).resolve().parent.parent / "corpus"
-THAI_DIGITS = str.maketrans("๐๑๒๓๔๕๖๗๘๙", "0123456789")
-
-
-def to_arabic(text: str) -> str:
-    return text.translate(THAI_DIGITS)
+LOCAL = CORPUS / "local"     # ของที่ผู้ใช้ดึงเอง — git ไม่ติดตาม เลย git pull ไม่ชนกัน
 
 
 def corpus_files(pattern: str = "") -> list[Path]:
-    files = sorted(CORPUS.glob("*.md"))
+    """ไฟล์ใน corpus/local/ ใช้แทนไฟล์ชื่อเดียวกันใน corpus/ (ผู้ใช้ดึงฉบับใหม่กว่ามาเอง)"""
+    local = {f.stem: f for f in LOCAL.glob("*.md")} if LOCAL.is_dir() else {}
+    shipped = {f.stem: f for f in CORPUS.glob("*.md")}
+    files = [local.get(stem, f) for stem, f in sorted(shipped.items())]
+    files += [f for stem, f in sorted(local.items()) if stem not in shipped]
     if pattern:
         low = pattern.lower()
         files = [f for f in files if low in f.stem.lower()]
@@ -81,6 +81,19 @@ def split_sections(path: Path) -> list[tuple[str, str, str]]:
 MAX_BODY = 4000   # เอกสารสรุป (ระเบียบ/คำสั่ง) มีหัวข้อเดียวยาวหลายพันตัวอักษร
 
 
+def snapshot(path: Path) -> str:
+    """บรรทัดบอกว่าตัวบทนี้ดึงมาเมื่อไหร่ — กันอ้างมาตราที่ถูกแก้ไปแล้วโดยไม่รู้ตัว"""
+    head = path.read_text(encoding="utf-8")[:1500]
+    fetched = re.search(r"ดึงเมื่อ:\s*(\S+)", head)
+    effective = re.search(r"ใช้บังคับ:\s*(\S+)", head)
+    if "ผ่าน getLawDoc" not in head:
+        return "ฉบับสรุป ไม่ใช่ตัวบทจาก ocs — อ้างในสำนวนต้องเปิดต้นฉบับยืนยัน"
+    where = "corpus/local" if path.parent == LOCAL else "corpus"
+    return (f"ตัวบทใน {where} ดึงเมื่อ {fetched.group(1) if fetched else 'ไม่ทราบ'}"
+            + (f" (ฉบับใช้บังคับ {effective.group(1)})" if effective else "")
+            + " — ก่อนอ้างในสำนวน เช็คว่ามีแก้ไขหลังวันนั้นไหม: python3 scripts/ocs_getdoc.py --name <ชื่อ>")
+
+
 def show(path: Path, heading: str, crumb: str, body: str) -> None:
     print(f"\n=== {path.stem} · {heading}")
     if crumb:
@@ -90,15 +103,20 @@ def show(path: Path, heading: str, crumb: str, body: str) -> None:
 
 
 def by_section(number: str, file_filter: str) -> int:
-    target = to_arabic(number).strip()
-    target_norm = re.sub(r"\s+", " ", target)
+    wanted = norm_section(number)
+    if not wanted:
+        print(f"อ่านเลขมาตราจาก '{number}' ไม่ออก", file=sys.stderr)
+        return 2
     hits = 0
     for path in corpus_files(file_filter):
+        file_hits = 0
         for heading, crumb, body in split_sections(path):
-            head_no = re.sub(r"^มาตรา\s+", "", heading.split("〔")[0]).strip()
-            if re.sub(r"\s+", " ", to_arabic(head_no)) == target_norm:
+            if norm_section(heading.split("〔")[0])[:1] == wanted[:1]:
                 show(path, heading, crumb, body)
-                hits += 1
+                file_hits += 1
+        if file_hits:
+            print(f"\n    ({snapshot(path)})")
+        hits += file_hits
     if not hits:
         print(f"ไม่พบมาตรา {number} ใน corpus — ลองค้นออนไลน์: python3 ocs_search.py \"...\"",
               file=sys.stderr)
@@ -107,11 +125,11 @@ def by_section(number: str, file_filter: str) -> int:
 
 
 def by_keyword(query: str, file_filter: str, full: int) -> int:
-    words = [to_arabic(w) for w in query.split()]
+    words = [to_arabic(norm_thai(w)) for w in query.split()]
     results = []
     for path in corpus_files(file_filter):
         for heading, crumb, body in split_sections(path):
-            hay = to_arabic(body)
+            hay = to_arabic(norm_thai(body))
             if all(w in hay for w in words):
                 results.append((path, heading, crumb, body))
 
@@ -129,6 +147,8 @@ def by_keyword(query: str, file_filter: str, full: int) -> int:
             print(f"    {snippet}…")
     if len(results) > full:
         print(f"\n(แสดงเต็ม {full} รายการแรก — เพิ่มด้วย -c N)")
+    for path in dict.fromkeys(p for p, *_ in results):
+        print(f"({path.stem}: {snapshot(path)})")
     return 0
 
 
@@ -143,9 +163,11 @@ def main() -> int:
 
     if args.list:
         for path in corpus_files():
-            first = path.read_text(encoding="utf-8").split("\n", 1)[0].lstrip("# ")
-            n = len(re.findall(r"^## มาตรา ", path.read_text(encoding="utf-8"), re.M))
+            text = path.read_text(encoding="utf-8")
+            first = text.split("\n", 1)[0].lstrip("# ")
+            n = len(re.findall(r"^## มาตรา ", text, re.M))
             print(f"{path.stem:24} {first}  ({n} มาตรา)")
+            print(f"{'':24} {snapshot(path)}")
         return 0
 
     if args.section:

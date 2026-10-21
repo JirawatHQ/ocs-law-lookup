@@ -5,7 +5,11 @@
 และกับ พ.ร.บ. ที่ต้องการตัวบท structured แทน PDF
 
   python3 ocs_getdoc.py <timelineId> [-o out.md]
-  python3 ocs_getdoc.py --name penal          # ใช้ id ที่ verify แล้ว (ดู references/law_ids.md)
+  python3 ocs_getdoc.py --name penal -o corpus/local/penal_code.md   # ดึงฉบับล่าสุดเก็บในเครื่อง
+  (--name: penal / crimproc / police — หา id ล่าสุดจาก ocs ทุกครั้ง ใช้ id ที่จดไว้เมื่อหาไม่เจอ)
+
+เก็บไฟล์ที่ดึงเองใน corpus/local/ เสมอ อย่าเขียนทับไฟล์ใน corpus/ ที่มากับสกิล
+(เขียนทับแล้ว git pull รอบหน้าจะไม่ยอมอัปเดต)
   python3 ocs_getdoc.py <timelineId> --json raw.json   # เก็บ JSON ดิบด้วย
 """
 from __future__ import annotations
@@ -16,25 +20,39 @@ import json
 import re
 import sys
 import time
+from datetime import date
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _http import HttpError, post_json  # noqa: E402
+from _text import fix_console, law_key  # noqa: E402
 
-# Windows: console เริ่มต้นเป็น cp874 → print ภาษาไทยแล้ว UnicodeEncodeError ทันที
-# (macOS/Linux เป็น UTF-8 อยู่แล้ว บรรทัดนี้ไม่มีผล)
-for _stream in (sys.stdout, sys.stderr):
-    if hasattr(_stream, "reconfigure"):
-        _stream.reconfigure(encoding="utf-8", errors="replace")
+fix_console()
 
 API = "https://searchlaw.ocs.go.th/ocs-api/public/doc/getLawDoc"
 OK_CODES = {"", "0", "000000", "SUCCESS", "None"}
 
-# timelineId ที่ยืนยันแล้ว (ดู references/law_ids.md — วิธีหา id ของฉบับอื่นอยู่ในนั้น)
+# timelineId ที่ยืนยันแล้ว 2026-10-21 (ดู references/law_ids.md — วิธีหา id ของฉบับอื่นอยู่ในนั้น)
+# ใช้เป็นทางสำรอง: --name จะค้นชื่อเต็มใน ocs ก่อน เผื่อ id เปลี่ยนเมื่อกฎหมายแก้ไข
 KNOWN = {
     "penal": ("K2dTMURyaDllOXJVWVZqZGJLK09pdz09", "ประมวลกฎหมายอาญา"),
     "crimproc": ("UVdzUTNzUFZlT3VBOEw2allVWTZxZz09", "ประมวลกฎหมายวิธีพิจารณาความอาญา"),
+    "police": ("UEY5OTdqYWRyZE9IM1NqTE5ZLzk4dz09", "พระราชบัญญัติตำรวจแห่งชาติ พ.ศ. 2565"),
 }
+
+
+def latest_id(name: str) -> str | None:
+    """ค้นชื่อเต็มใน ocs คืน encTimelineID ของฉบับที่ชื่อตรงเป๊ะ (ไม่เจอ = None)"""
+    from ocs_search import search
+    try:
+        res = search(name, content=0, perpage=20)
+    except HttpError:
+        return None
+    for row in res.get("data") or []:
+        title = re.sub(r"<[^>]+>", "", row.get("lawNameTh", ""))
+        if law_key(title) == law_key(name) and row.get("encTimelineID"):
+            return row["encTimelineID"]
+    return None
 
 
 def fetch(timeline_id: str, timeout: int = 60, retries: int = 3) -> dict:
@@ -66,8 +84,10 @@ def fetch(timeline_id: str, timeout: int = 60, retries: int = 3) -> dict:
             time.sleep(2 * attempt)
         doc = post_json(API, json_body=payload, headers=headers, timeout=timeout)
         code = str(doc.get("respHeader", {}).get("errorCode", ""))
-        if code in OK_CODES:
+        if code in OK_CODES and isinstance(doc.get("respBody"), dict):
             return doc
+        if code in OK_CODES:
+            code = "ไม่มี respBody (รูปแบบคำตอบของ ocs อาจเปลี่ยน)"
         last_err = f"{code}: {doc.get('respHeader', {}).get('errorDesc', '')}"
     raise HttpError(f"getLawDoc ล้มเหลวหลังลอง {retries} ครั้ง — {last_err}")
 
@@ -102,6 +122,7 @@ def to_markdown(doc: dict) -> str:
         f"# {info.get('lawNameTh', '(ไม่ทราบชื่อ)')}",
         "",
         "> ตัวบทจริงจาก ocs.go.th (สำนักงานคณะกรรมการกฤษฎีกา) ผ่าน getLawDoc",
+        f"> ดึงเมื่อ: {date.today().isoformat()}",
         f"> lawCode: `{info.get('lawCode', '-')}` · timelineId: `{info.get('timelineId', '-')}`",
         f"> ประกาศ: {info.get('publishDateAd', '-')} · ใช้บังคับ: {info.get('effectiveDateStartAd', '-')}",
         f"> {n_sections} มาตรา (จาก {len(sections)} section)",
@@ -173,13 +194,19 @@ def to_markdown(doc: dict) -> str:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("timeline_id", nargs="?", help="encTimelineID จาก ocs")
-    ap.add_argument("--name", choices=sorted(KNOWN), help="ใช้ id ที่ verify ไว้แล้ว")
+    ap.add_argument("--name", choices=sorted(KNOWN), help="penal / crimproc / police (หา id ล่าสุดจาก ocs ให้)")
     ap.add_argument("-o", "--out", help="ไฟล์ Markdown ปลายทาง (ไม่ใส่ = พิมพ์ออก stdout)")
     ap.add_argument("--json", dest="json_out", help="เก็บ JSON ดิบไว้ด้วย")
     args = ap.parse_args()
 
     if args.name:
-        timeline_id, label = KNOWN[args.name]
+        known_id, label = KNOWN[args.name]
+        timeline_id = latest_id(label)
+        if timeline_id is None:
+            print(f"หา id ล่าสุดของ {label} จาก ocs ไม่เจอ — ใช้ id ที่จดไว้แทน", file=sys.stderr)
+            timeline_id = known_id
+        elif timeline_id != known_id:
+            print(f"ocs มี id ใหม่ของ {label} (ต่างจากที่จดไว้) — ใช้ id ใหม่", file=sys.stderr)
     elif args.timeline_id:
         timeline_id, label = args.timeline_id, args.timeline_id
     else:
@@ -196,11 +223,23 @@ def main() -> int:
             json.dump(doc, fh, ensure_ascii=False, indent=1)
 
     md = to_markdown(doc)
+    n_sections = len(re.findall(r"^## มาตรา ", md, re.M))
+    if n_sections == 0:
+        print("ได้ตัวบท 0 มาตรา (คำตอบจาก ocs ผิดรูป) — ไม่เขียนไฟล์ ลองใหม่ภายหลัง", file=sys.stderr)
+        return 1
     if args.out:
-        with open(args.out, "w", encoding="utf-8") as fh:
-            fh.write(md)
-        n = len(doc["respBody"].get("lawSections", []))
-        print(f"เขียน {args.out} ({n} sections, {len(md):,} ตัวอักษร) — {label}")
+        out = Path(args.out)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        if out.exists():
+            old = len(re.findall(r"^## มาตรา ", out.read_text(encoding="utf-8"), re.M))
+            if n_sections < old * 0.8:
+                print(f"ได้ {n_sections} มาตรา น้อยกว่าไฟล์เดิม ({old}) มาก — ไม่เขียนทับ "
+                      "(อาจดึงมาไม่ครบ) ถ้าแน่ใจให้ลบไฟล์เดิมก่อน", file=sys.stderr)
+                return 1
+        tmp = out.with_suffix(out.suffix + ".tmp")
+        tmp.write_text(md, encoding="utf-8")
+        tmp.replace(out)              # เขียนเสร็จค่อยสลับ — ไฟล์เดิมไม่พังถ้าหลุดกลางทาง
+        print(f"เขียน {out} ({n_sections} มาตรา, {len(md):,} ตัวอักษร) — {label}")
     else:
         print(md)
     return 0

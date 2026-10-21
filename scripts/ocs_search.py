@@ -23,12 +23,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _http import HttpError, post_json  # noqa: E402
+from _text import fix_console  # noqa: E402
 
-# Windows: console เริ่มต้นเป็น cp874 → print ภาษาไทยแล้ว UnicodeEncodeError ทันที
-# (macOS/Linux เป็น UTF-8 อยู่แล้ว บรรทัดนี้ไม่มีผล)
-for _stream in (sys.stdout, sys.stderr):
-    if hasattr(_stream, "reconfigure"):
-        _stream.reconfigure(encoding="utf-8", errors="replace")
+fix_console()
 
 API = "https://www.ocs.go.th/searchlaw/indexs/list_table_search"
 PDF_BASE = "https://www.ocs.go.th/downloadfile/"
@@ -87,8 +84,13 @@ def main() -> int:
         print(json.dumps(res, ensure_ascii=False, indent=1))
         return 0
 
+    if not isinstance(res.get("data"), list):
+        # ไม่มี data เลย ≠ ค้นแล้วได้ 0 ฉบับ — รูปแบบคำตอบของ ocs เปลี่ยน
+        print("อ่านคำตอบจาก ocs ไม่ออก (รูปแบบอาจเปลี่ยน) — ห้ามสรุปว่าไม่มีกฎหมายนี้ "
+              "ค้นเองที่ https://www.ocs.go.th/searchlaw", file=sys.stderr)
+        return 3
     meta = res.get("meta", {})
-    rows = res.get("data", []) or []
+    rows = res["data"]
     print(f"พบ {meta.get('total', '?')} ฉบับ (หน้า {meta.get('page', args.page)}/{meta.get('pages', '?')}) "
           f"— แสดง {len(rows)}\n")
 
@@ -106,8 +108,10 @@ def main() -> int:
             print(f"    ตัวบทรายมาตรา: python3 ocs_getdoc.py {row['encTimelineID']} -o out.md")
         kids = row.get("childrens") or []
         if kids:
-            print(f"    กฎลูก {len(kids)} ฉบับ: " + "; ".join(k.get("lawNameTh", "-") for k in kids[:3])
-                  + ("…" if len(kids) > 3 else ""))
+            # childrens = หมวดกฎลูก (ประกาศ/ระเบียบ/กฎกระทรวง) แต่ละหมวดมี items เป็นรายฉบับ
+            print("    กฎลูก: " + ", ".join(
+                f"{clean(k.get('name') or k.get('lawNameTh') or '-', 40)} {len(k.get('items') or [])} ฉบับ"
+                for k in kids))
         print()
 
     print("อ้างอิงทุกครั้ง: ชื่อฉบับ + ปี + ลิงก์ — ห้ามสรุปมาตราจากความจำ")

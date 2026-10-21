@@ -17,7 +17,12 @@ git clone https://github.com/JirawatHQ/ocs-law-lookup.git ~/.claude/skills/ocs-l
 git clone https://github.com/JirawatHQ/ocs-law-lookup.git "$env:USERPROFILE\.claude\skills\ocs-law-lookup"
 ```
 
-อัปเดตรุ่นใหม่: `git -C ~/.claude/skills/ocs-law-lookup pull`
+อัปเดตรุ่นใหม่:
+- macOS / Linux: `git -C ~/.claude/skills/ocs-law-lookup pull`
+- Windows: `git -C "$env:USERPROFILE\.claude\skills\ocs-law-lookup" pull`
+
+ถ้า pull ไม่ผ่านเพราะเคยแก้ไฟล์ในโฟลเดอร์เอง ให้ย้ายไฟล์ที่แก้ไปเก็บก่อน แล้วสั่ง
+`git -C <โฟลเดอร์> reset --hard origin/main` ตามด้วย pull ใหม่ (ไฟล์ใน `corpus/local/` ไม่โดนลบ เพราะ git ไม่ได้ติดตาม)
 
 เปิด Claude Code ใหม่ พิมพ์ `/skills` ควรเห็น `ocs-law-lookup` ในรายการ
 
@@ -74,9 +79,12 @@ references/           runbook API + กับดักที่เจอจร�
 
 ## ข้อจำกัด (อ่านก่อนใช้กับงานจริง)
 
-- **ตัวบทใน `corpus/` คือภาพ ณ วันที่ดึง (21 ก.ค. 2569)** ไม่อัปเดตเอง
-  กฎหมายที่แก้บ่อยให้ดึงใหม่: `python3 scripts/ocs_getdoc.py --name penal -o corpus/penal_code.md`
-- ฎีกาตัวเต็มต้องต่อเน็ต และช้าได้ถึง ~2 นาทีต่อคำค้น
+- **ตัวบทใน `corpus/` คือภาพ ณ วันที่ดึง (21 ก.ค. 2569)** ไม่อัปเดตเอง ทุกผลค้นบอกวันที่นี้กำกับ
+  ดึงฉบับล่าสุดเก็บในเครื่อง: `python3 scripts/ocs_getdoc.py --name penal -o corpus/local/penal_code.md`
+  (`--name` รับ penal / crimproc / police) ไฟล์ใน `corpus/local/` ใช้แทนของเดิมอัตโนมัติ
+  **อย่าเขียนทับไฟล์ใน `corpus/` ตรงๆ** ไม่งั้น git pull รอบหน้าจะไม่ยอมอัปเดต
+- ฎีกาตัวเต็มต้องต่อเน็ต และช้าได้ถึง ~2 นาทีต่อคำค้น ถ้าเว็บศาลล่มหรือเปลี่ยนหน้าตา สคริปต์จะบอกตรงๆ
+  ว่าติดต่อไม่ได้/อ่านไม่ออก (ไม่ตอบว่า "ไม่พบ")
 - `deka_cite.py` ใช้ดัชนีข้อมูลเปิด [phoneee/thai-legal-corpus](https://huggingface.co/datasets/phoneee/thai-legal-corpus) (CC-BY 4.0)
   มี 70,387 เลขฎีกาถึงปี 2568 แต่**ไม่ครบทุกเรื่อง** และมีแค่เลขฎีกา + มาตราที่อ้าง ไม่มีคำวินิจฉัย
 - **สกิลไม่ได้ตัดสินคดีให้** — มันดึงของจริงมาให้อ่าน การปรับบทยังเป็นงานของคนใช้
@@ -98,5 +106,6 @@ references/           runbook API + กับดักที่เจอจร�
 
 - โค้ดในชุดนี้: MIT
 - ตัวบทใน `corpus/` ดึงจาก ocs.go.th: กฎหมายไม่มีลิขสิทธิ์ตาม พ.ร.บ.ลิขสิทธิ์ พ.ศ. 2537 มาตรา 7
-- `corpus/deka_cite_index.json.gz` ทำจาก [phoneee/thai-legal-corpus](https://huggingface.co/datasets/phoneee/thai-legal-corpus) (CC-BY 4.0) เก็บแค่เลขฎีกาและมาตราที่อ้าง
+- `corpus/deka_cite_index.json.gz` ดัดแปลงจาก [phoneee/thai-legal-corpus](https://huggingface.co/datasets/phoneee/thai-legal-corpus)
+  โดย phoneee (CC-BY 4.0) ส่วนที่ดัดแปลง: เก็บแค่เลขฎีกาและมาตราที่อ้าง, จัดรูปเลขมาตรา, ตัดแถวที่ไม่มีเลขฎีกา
 - คำพิพากษาฎีกาเป็นลิขสิทธิ์ศาลฎีกา สคริปต์ดึงทีละเรื่องเท่าที่ใช้ ห้ามดึงทีละมากๆ

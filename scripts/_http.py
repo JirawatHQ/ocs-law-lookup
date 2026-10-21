@@ -28,7 +28,8 @@ def _curl_post(url: str, *, body: bytes, headers: dict, timeout: int) -> bytes:
             f"เชื่อมต่อ {url} ด้วย Python ไม่ได้ (cert chain ฝั่งเซิร์ฟเวอร์ไม่ครบ) "
             "และไม่พบคำสั่ง curl ในเครื่อง — ติดตั้ง curl แล้วลองใหม่"
         )
-    cmd = ["curl", "-sS", "--max-time", str(timeout), "-X", "POST", url, "--data-binary", "@-"]
+    # -f: HTTP 4xx/5xx = error ชัดๆ แทนที่จะได้หน้า error HTML แล้วไปพังตอนอ่าน JSON
+    cmd = ["curl", "-sSf", "--max-time", str(timeout), "-X", "POST", url, "--data-binary", "@-"]
     for key, value in headers.items():
         cmd += ["-H", f"{key}: {value}"]
     proc = subprocess.run(cmd, input=body, capture_output=True)
@@ -58,6 +59,9 @@ def post(url: str, *, form: dict | None = None, json_body: dict | None = None,
         if "SSL" not in str(exc.reason) and "CERTIFICATE" not in str(exc.reason).upper():
             raise HttpError(f"เรียก {url} ไม่สำเร็จ: {exc.reason}") from exc
         return _curl_post(url, body=body, headers=headers, timeout=timeout)
+    except (TimeoutError, OSError) as exc:
+        # หมดเวลาระหว่างอ่านคำตอบไม่ได้มาเป็น URLError (Python 3.10+) → ต้องจับแยก
+        raise HttpError(f"เรียก {url} ไม่สำเร็จ (เซิร์ฟเวอร์ช้าหรือหลุด): {exc}") from exc
 
 
 def post_json(url: str, **kwargs) -> dict:

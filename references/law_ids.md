@@ -8,9 +8,10 @@
 |---|---|---|
 | ประมวลกฎหมายอาญา | `K2dTMURyaDllOXJVWVZqZGJLK09pdz09` | `--name penal` |
 | ประมวลกฎหมายวิธีพิจารณาความอาญา | `UVdzUTNzUFZlT3VBOEw2allVWTZxZz09` | `--name crimproc` |
-| พระราชบัญญัติตำรวจแห่งชาติ พ.ศ. 2565 | `UEY5OTdqYWRyZE9IM1NqTE5ZLzk4dz09` | — |
+| พระราชบัญญัติตำรวจแห่งชาติ พ.ศ. 2565 | `UEY5OTdqYWRyZE9IM1NqTE5ZLzk4dz09` | `--name police` |
 
-> id ผูกกับ **ฉบับ ณ เวลาที่แก้ไขล่าสุด** — ถ้ากฎหมายถูกแก้ใหม่ ควรค้นใหม่เพื่อเอา id ล่าสุด
+> `--name` ค้นชื่อเต็มใน ocs เพื่อเอา id ล่าสุดทุกครั้ง ตารางนี้เป็นทางสำรองเมื่อค้นไม่เจอ
+> (ตรวจ 2026-10-21: id ทั้ง 3 ฉบับยังตรงกับที่ ocs ใช้อยู่)
 > (ดึงครั้งล่าสุด: ป.อาญา แก้ไขถึงฉบับที่ 30/2568 · พ.ร.บ.ตำรวจ 2565 ใช้บังคับ 2022-10-17)
 
 ## หา id ของกฎหมายฉบับอื่น
@@ -18,10 +19,10 @@
 ```bash
 python3 scripts/ocs_search.py "ชื่อกฎหมาย" --title-only
 # ผลค้นจะพิมพ์บรรทัด "ตัวบทรายมาตรา: python3 ocs_getdoc.py <id> -o out.md" ให้เลย
-python3 scripts/ocs_getdoc.py <id> -o corpus/ชื่อไฟล์.md
+python3 scripts/ocs_getdoc.py <id> -o corpus/local/ชื่อไฟล์.md
 ```
 
-ไฟล์ที่ได้จะเข้าระบบ `law_grep.py` อัตโนมัติ (สแกนทุก `.md` ใน `corpus/`)
+ไฟล์ที่ได้จะเข้าระบบ `law_grep.py` อัตโนมัติ (สแกน `corpus/` และ `corpus/local/`)
 
 ## หมวดที่ใช้บ่อย (`--category`)
 
