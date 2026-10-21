@@ -131,10 +131,16 @@ references/           runbook API + กับดักที่เจอจร�
 | [references/law_ids.md](references/law_ids.md) | ตารางรหัสกฎหมาย (lawId) ที่ใช้บ่อย |
 | `scripts/` | `ocs_search.py` · `ocs_getdoc.py` · `deka_search.py` · `deka_cite.py` · `law_grep.py` |
 
+## ร่วมพัฒนา
+
+ยังไม่รับ pull request — แจ้งปัญหาหรือขอกฎหมายเพิ่มได้ที่ [Issues](https://github.com/JirawatHQ/ocs-law-lookup/issues)
+แนบผล `python3 scripts/selfcheck.py` มาด้วย · แจ้งช่องโหว่หรือข้อมูลที่ไม่ควรอยู่ใน repo ดู [SECURITY.md](SECURITY.md)
+
 ## สิทธิ์การใช้
 
 - โค้ดในชุดนี้: MIT
-- ตัวบทใน `corpus/` ดึงจาก ocs.go.th: กฎหมายไม่มีลิขสิทธิ์ตาม พ.ร.บ.ลิขสิทธิ์ พ.ศ. 2537 มาตรา 7
+- ตัวบทใน `corpus/` ดึงจาก ocs.go.th: กฎหมายไม่ถือเป็นงานอันมีลิขสิทธิ์ตาม พ.ร.บ.ลิขสิทธิ์ พ.ศ. 2537 มาตรา 7 (2)
 - `corpus/deka_cite_index.json.gz` ดัดแปลงจาก [phoneee/thai-legal-corpus](https://huggingface.co/datasets/phoneee/thai-legal-corpus)
   โดย phoneee (CC-BY 4.0) ส่วนที่ดัดแปลง: เก็บแค่เลขฎีกาและมาตราที่อ้าง, จัดรูปเลขมาตรา, ตัดแถวที่ไม่มีเลขฎีกา
-- คำพิพากษาฎีกาเป็นลิขสิทธิ์ศาลฎีกา สคริปต์ดึงทีละเรื่องเท่าที่ใช้ ห้ามดึงทีละมากๆ
+- คำพิพากษาไม่ถือเป็นงานอันมีลิขสิทธิ์ตามมาตรา 7 (4) แต่เว็บ deka.supremecourt.or.th เป็นของศาลฎีกา
+  และมีเงื่อนไขการใช้เว็บของตัวเอง สคริปต์จึงดึงทีละเรื่องเท่าที่ใช้ ไม่ดึงทีละมากๆ
