@@ -6,6 +6,11 @@
 
 ## [Unreleased]
 
+## [1.3.2] - 2026-10-21
+
+### Added
+- `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md` (Contributor Covenant 2.1) และแบบฟอร์ม issue (แจ้งปัญหา / ขอความสามารถเพิ่ม)
+
 ## [1.3.1] - 2026-10-21
 
 ### Added
