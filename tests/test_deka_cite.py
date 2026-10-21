@@ -299,3 +299,34 @@ def test_unsupported_section_law_is_explicit(monkeypatch, capsys):
     monkeypatch.setattr(sys, "argv", ["deka_search.py", "--section", "15", "--law", "ยาเสพติด"])
     assert deka_search.main() == 2
     assert "ยังรองรับเฉพาะ" in capsys.readouterr().err
+
+
+def test_to_markdown_title_with_thai_digits_is_main_act():
+    """หัวเรื่อง "พ.ศ. ๒๕๓๙" ต้องนับเป็นตัวบทหลัก ไม่ใช่ฉบับแก้ไข (เคยติดป้ายผิด ม.1-5 พ.ร.บ.ตร.)"""
+    doc = {"respBody": {
+        "lawInfo": {"lawNameTh": "พระราชบัญญัติวิธีปฏิบัติราชการทางปกครอง พ.ศ. 2539"},
+        "lawSections": [
+            {"sectionTypeId": "1", "sectionContent": "พระราชบัญญัติ\nวิธีปฏิบัติราชการทางปกครอง\nพ.ศ. ๒๕๓๙"},
+            {"sectionTypeId": "4", "sectionNo": "3", "sectionContent": "วิธีปฏิบัติราชการ"},
+        ],
+    }}
+    assert "## มาตรา 3\n" in ocs_getdoc.to_markdown(doc)
+
+
+def test_civil_code_book_is_top_of_breadcrumb(tmp_path, monkeypatch, capsys):
+    doc = {"respBody": {
+        "lawInfo": {"lawNameTh": "ประมวลกฎหมายแพ่งและพาณิชย์"},
+        "lawSections": [
+            {"sectionTypeId": "5", "sectionNo": "1", "sectionContent": "บรรพ ๑\nหลักทั่วไป"},
+            {"sectionTypeId": "7", "sectionNo": "1", "sectionContent": "ลักษณะ ๑\nบทเบ็ดเสร็จทั่วไป"},
+            {"sectionTypeId": "4", "sectionNo": "1", "sectionContent": "มาตรา ๑"},
+            {"sectionTypeId": "5", "sectionNo": "2", "sectionContent": "บรรพ ๒\nหนี้"},
+            {"sectionTypeId": "7", "sectionNo": "5", "sectionContent": "ลักษณะ ๕\nละเมิด"},
+            {"sectionTypeId": "4", "sectionNo": "420", "sectionContent": "มาตรา ๔๒๐ ผู้ใดจงใจ"},
+        ],
+    }}
+    (tmp_path / "civil_code.md").write_text(ocs_getdoc.to_markdown(doc), encoding="utf-8")
+    monkeypatch.setattr(law_grep, "CORPUS", tmp_path)
+    monkeypatch.setattr(law_grep, "LOCAL", tmp_path / "local")
+    law_grep.by_section("420", "")
+    assert "(บรรพ 2 หนี้ › ลักษณะ 5 ละเมิด)" in capsys.readouterr().out

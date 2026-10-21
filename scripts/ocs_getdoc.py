@@ -6,7 +6,8 @@
 
   python3 ocs_getdoc.py <timelineId> [-o out.md]
   python3 ocs_getdoc.py --name penal -o corpus/local/penal_code.md   # ดึงฉบับล่าสุดเก็บในเครื่อง
-  (--name: penal / crimproc / police — หา id ล่าสุดจาก ocs ทุกครั้ง ใช้ id ที่จดไว้เมื่อหาไม่เจอ)
+  (--name: penal / crimproc / police / civil / aml / nacc / admin — หา id ล่าสุดจาก ocs ทุกครั้ง
+   ใช้ id ที่จดไว้เมื่อหาไม่เจอ)
 
 เก็บไฟล์ที่ดึงเองใน corpus/local/ เสมอ อย่าเขียนทับไฟล์ใน corpus/ ที่มากับสกิล
 (เขียนทับแล้ว git pull รอบหน้าจะไม่ยอมอัปเดต)
@@ -38,7 +39,16 @@ KNOWN = {
     "penal": ("K2dTMURyaDllOXJVWVZqZGJLK09pdz09", "ประมวลกฎหมายอาญา"),
     "crimproc": ("UVdzUTNzUFZlT3VBOEw2allVWTZxZz09", "ประมวลกฎหมายวิธีพิจารณาความอาญา"),
     "police": ("UEY5OTdqYWRyZE9IM1NqTE5ZLzk4dz09", "พระราชบัญญัติตำรวจแห่งชาติ พ.ศ. 2565"),
+    "civil": ("Qko1NGNVa1FhMG9hTTNGcU9sTGxydz09", "ประมวลกฎหมายแพ่งและพาณิชย์"),
+    "aml": ("YU5IWVFwdXI2bTl2T3JXMlE0elZUQT09", "พระราชบัญญัติป้องกันและปราบปรามการฟอกเงิน พ.ศ. 2542"),
+    "nacc": ("UXpQTXRLd1dCaWRTM1lSQVRzSUFwUT09",
+             "พระราชบัญญัติประกอบรัฐธรรมนูญว่าด้วยการป้องกันและปราบปรามการทุจริต พ.ศ. 2561"),
+    "admin": ("Mm80K3JmNTNWaldlc1Bya3BlZlZJdz09", "พระราชบัญญัติวิธีปฏิบัติราชการทางปกครอง พ.ศ. 2539"),
 }
+# ชื่อไฟล์ใน corpus/ ของแต่ละ --name (ใช้ตอนบอกผู้ใช้ว่าดึงใหม่ไปไว้ที่ไหน)
+CORPUS_FILE = {"penal": "penal_code", "crimproc": "crim_proc_code", "police": "police_act_2565",
+               "civil": "civil_code", "aml": "aml_act_2542", "nacc": "nacc_act_2561",
+               "admin": "admin_procedure_2539"}
 
 
 def latest_id(name: str) -> str | None:
@@ -108,7 +118,7 @@ def strip_html(raw: str) -> str:
 TYPE_SECTION = "4"          # มาตรา
 TYPE_TITLE = "1"            # ชื่อกฎหมาย (โผล่ซ้ำเมื่อขึ้นเอกสารใหม่ในไฟล์เดียว)
 TYPE_TOC = "16"             # สารบาญ — ตัดทิ้ง (ตารางยุบเป็นข้อความอ่านไม่รู้เรื่อง)
-TYPE_STRUCTURE = {"6": "ภาค", "7": "ลักษณะ", "8": "หมวด", "9": "ส่วน"}
+TYPE_STRUCTURE = {"5": "บรรพ", "6": "ภาค", "7": "ลักษณะ", "8": "หมวด", "9": "ส่วน"}   # บรรพ = ป.พ.พ.
 
 
 def to_markdown(doc: dict) -> str:
@@ -133,7 +143,7 @@ def to_markdown(doc: dict) -> str:
 
     # ไฟล์เดียวมีหลายเอกสาร: พ.ร.บ.ให้ใช้ประมวลฯ → ตัวประมวล → พ.ร.บ.แก้ไขเพิ่มเติมท้ายเล่ม (30+ ฉบับ)
     # แต่ละฉบับมีมาตรา 1,2,3 ของตัวเอง → ต้องกำกับที่ heading ไม่งั้นค้น "มาตรา 2" ได้ผิดฉบับ
-    main_title = re.sub(r"\s+", "", info.get("lawNameTh", ""))
+    main_title = law_key(info.get("lawNameTh", ""))
     doc_label = ""
     in_main = False       # อยู่ในตัวบทหลักหรือยัง (ไม่ใช่ พ.ร.บ.ให้ใช้ฯ / ฉบับแก้ไขท้ายเล่ม)
     seen_title = False
@@ -168,7 +178,8 @@ def to_markdown(doc: dict) -> str:
             # เอกสารใหม่เริ่มตรงนี้ (เช่น พ.ร.บ.ให้ใช้ประมวลฯ จบ → ตัวประมวลเริ่มมาตรา 1 ใหม่)
             doc_label = re.sub(r"\s+", " ", content.replace("\n", " ")).strip()
             # ตัวบทหลักเริ่มเมื่อ title ตรงกับชื่อกฎหมาย (ป.อาญา) — ฉบับแก้ไขท้ายเล่มปิด flag นี้
-            in_main = re.sub(r"\s+", "", doc_label) == main_title
+            # law_key: หัวเรื่องเขียนเลขไทย/เว้นวรรคต่างจาก lawNameTh ("พ.ศ. ๒๕๓๙" vs "พ.ศ. 2539")
+            in_main = law_key(doc_label) == main_title
             if seen_title:
                 out += ["", "---", ""]
             seen_title = True
@@ -194,7 +205,7 @@ def to_markdown(doc: dict) -> str:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("timeline_id", nargs="?", help="encTimelineID จาก ocs")
-    ap.add_argument("--name", choices=sorted(KNOWN), help="penal / crimproc / police (หา id ล่าสุดจาก ocs ให้)")
+    ap.add_argument("--name", choices=sorted(KNOWN), help="penal / crimproc / police / civil / aml / nacc / admin (หา id ล่าสุดจาก ocs ให้)")
     ap.add_argument("-o", "--out", help="ไฟล์ Markdown ปลายทาง (ไม่ใส่ = พิมพ์ออก stdout)")
     ap.add_argument("--json", dest="json_out", help="เก็บ JSON ดิบไว้ด้วย")
     args = ap.parse_args()

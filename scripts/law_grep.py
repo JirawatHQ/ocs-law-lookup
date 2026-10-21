@@ -56,7 +56,7 @@ def split_sections(path: Path) -> list[tuple[str, str, str]]:
             label = line[4:].replace("〔", "").replace("〕", "").strip()
             if kind:
                 # ภาค > ลักษณะ > หมวด > ส่วน — ระดับใหม่ตัดของเดิมที่ลึกกว่า
-                order = {"ภาค": 0, "ลักษณะ": 1, "หมวด": 2, "ส่วน": 3}
+                order = {"บรรพ": 0, "ภาค": 0, "ลักษณะ": 1, "หมวด": 2, "ส่วน": 3}   # บรรพ = ป.พ.พ.
                 depth = order.get(kind.group(1), 3)
                 crumbs = crumbs[:depth] + [label]
             continue
@@ -156,7 +156,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("query", nargs="?", help="คำค้น")
     ap.add_argument("-s", "--section", help="เลขมาตรา (เช่น 341 หรือ \"277 ทวิ\")")
-    ap.add_argument("-f", "--file", default="", help="จำกัดฉบับ (penal / crim / police)")
+    ap.add_argument("-f", "--file", default="", help="จำกัดฉบับด้วยชื่อไฟล์บางส่วน (penal / crim / civil / police / aml / nacc / admin)")
     ap.add_argument("-c", "--count", type=int, default=3, help="จำนวนผลที่แสดงเต็ม (default 3)")
     ap.add_argument("--list", action="store_true", help="ดูรายชื่อตัวบทที่มีในเครื่อง")
     args = ap.parse_args()
