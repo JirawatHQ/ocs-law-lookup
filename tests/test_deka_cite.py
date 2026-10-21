@@ -330,3 +330,32 @@ def test_civil_code_book_is_top_of_breadcrumb(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(law_grep, "LOCAL", tmp_path / "local")
     law_grep.by_section("420", "")
     assert "(บรรพ 2 หนี้ › ลักษณะ 5 ละเมิด)" in capsys.readouterr().out
+
+
+def test_law_grep_file_alias_and_multi_law_hint(tmp_path, monkeypatch, capsys):
+    (tmp_path / "penal_code.md").write_text("# ประมวลกฎหมายอาญา\n\n## มาตรา 341\n\nฉ้อโกง\n", encoding="utf-8")
+    (tmp_path / "civil_code.md").write_text("# ประมวลกฎหมายแพ่งและพาณิชย์\n\n## มาตรา 341\n\nหนี้\n",
+                                            encoding="utf-8")
+    (tmp_path / "amla_2542.md").write_text("# พระราชบัญญัติป้องกันและปราบปรามการฟอกเงิน พ.ศ. 2542\n\n"
+                                           "## มาตรา 5\n\nฟอก\n", encoding="utf-8")
+    monkeypatch.setattr(law_grep, "CORPUS", tmp_path)
+    monkeypatch.setattr(law_grep, "LOCAL", tmp_path / "local")
+    law_grep.by_section("341", "")
+    assert "มีใน 2 ฉบับ" in capsys.readouterr().out
+    law_grep.by_section("341", "ป.อ.")
+    out = capsys.readouterr().out
+    assert "penal_code" in out and "civil_code" not in out
+    law_grep.by_section("5", "ฟอกเงิน")                    # ตามชื่อกฎหมาย แม้ชื่อไฟล์ตั้งเอง
+    assert "amla_2542" in capsys.readouterr().out
+
+
+def test_selfcheck_flags_duplicate_law(tmp_path, monkeypatch, capsys):
+    import selfcheck
+    (tmp_path / "corpus" / "local").mkdir(parents=True)
+    (tmp_path / "corpus" / "aml_act_2542.md").write_text("# พ.ร.บ.ฟอกเงิน พ.ศ. 2542\n", encoding="utf-8")
+    (tmp_path / "corpus" / "local" / "amla_2542.md").write_text("# พ.ร.บ.ฟอกเงิน  พ.ศ. 2542\n",
+                                                                 encoding="utf-8")
+    monkeypatch.setattr(selfcheck, "ROOT", tmp_path)
+    selfcheck.results.clear()
+    selfcheck.check_corpus()
+    assert ("ไม่มีกฎหมายฉบับเดียวกันซ้ำสองไฟล์", False) in [(n, ok) for n, ok, _ in selfcheck.results]

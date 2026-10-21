@@ -19,12 +19,19 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from _text import fix_console, norm_section, norm_thai, to_arabic  # noqa: E402
+from _text import fix_console, law_key, norm_section, norm_thai, to_arabic  # noqa: E402
 
 fix_console()
 
 CORPUS = Path(__file__).resolve().parent.parent / "corpus"
 LOCAL = CORPUS / "local"     # ของที่ผู้ใช้ดึงเอง — git ไม่ติดตาม เลย git pull ไม่ชนกัน
+
+# -f รับชื่อย่อที่คนพิมพ์กันได้ → ส่วนหนึ่งของชื่อไฟล์ (ป.อ. กับ ป.พ.พ. มีเลขมาตราซ้ำกันเยอะ ต้องเจาะฉบับ)
+FILE_ALIASES = {
+    "ป.อ.": "penal", "ป.อาญา": "penal", "ประมวลกฎหมายอาญา": "penal",
+    "ป.วิ.อ.": "crim_proc", "ป.วิ.อาญา": "crim_proc", "ประมวลกฎหมายวิธีพิจารณาความอาญา": "crim_proc",
+    "ป.พ.พ.": "civil", "ประมวลกฎหมายแพ่งและพาณิชย์": "civil",
+}
 
 
 def corpus_files(pattern: str = "") -> list[Path]:
@@ -34,9 +41,15 @@ def corpus_files(pattern: str = "") -> list[Path]:
     files = [local.get(stem, f) for stem, f in sorted(shipped.items())]
     files += [f for stem, f in sorted(local.items()) if stem not in shipped]
     if pattern:
-        low = pattern.lower()
-        files = [f for f in files if low in f.stem.lower()]
+        want = FILE_ALIASES.get(pattern.strip(), pattern).lower()
+        key = law_key(pattern)
+        files = [f for f in files if want in f.stem.lower() or key in law_key(_title(f))]
     return files
+
+
+def _title(path: Path) -> str:
+    with path.open(encoding="utf-8") as fh:
+        return fh.readline().lstrip("# ").strip()
 
 
 def split_sections(path: Path) -> list[tuple[str, str, str]]:
@@ -107,7 +120,7 @@ def by_section(number: str, file_filter: str) -> int:
     if not wanted:
         print(f"อ่านเลขมาตราจาก '{number}' ไม่ออก", file=sys.stderr)
         return 2
-    hits = 0
+    hits = files_hit = 0
     for path in corpus_files(file_filter):
         file_hits = 0
         for heading, crumb, body in split_sections(path):
@@ -117,6 +130,9 @@ def by_section(number: str, file_filter: str) -> int:
         if file_hits:
             print(f"\n    ({snapshot(path)})")
         hits += file_hits
+        files_hit += bool(file_hits)
+    if files_hit > 1 and not file_filter:
+        print(f"\n(มาตรา {number} มีใน {files_hit} ฉบับ — ถ้าถามถึงฉบับเดียว ระบุด้วย -f เช่น -f ป.อ. / -f ป.พ.พ.)")
     if not hits:
         print(f"ไม่พบมาตรา {number} ใน corpus — ลองค้นออนไลน์: python3 ocs_search.py \"...\"",
               file=sys.stderr)
@@ -156,7 +172,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("query", nargs="?", help="คำค้น")
     ap.add_argument("-s", "--section", help="เลขมาตรา (เช่น 341 หรือ \"277 ทวิ\")")
-    ap.add_argument("-f", "--file", default="", help="จำกัดฉบับด้วยชื่อไฟล์บางส่วน (penal / crim / civil / police / aml / nacc / admin)")
+    ap.add_argument("-f", "--file", default="", help="จำกัดฉบับ: ชื่อย่อ (ป.อ. / ป.วิ.อ. / ป.พ.พ.) ชื่อไฟล์บางส่วน หรือคำในชื่อกฎหมาย (ฟอกเงิน)")
     ap.add_argument("-c", "--count", type=int, default=3, help="จำนวนผลที่แสดงเต็ม (default 3)")
     ap.add_argument("--list", action="store_true", help="ดูรายชื่อตัวบทที่มีในเครื่อง")
     args = ap.parse_args()
